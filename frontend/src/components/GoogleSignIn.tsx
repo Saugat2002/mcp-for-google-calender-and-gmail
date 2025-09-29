@@ -14,7 +14,7 @@ const GoogleSignIn: React.FC<GoogleSignInProps> = ({ onAuthSuccess }) => {
     
     try {
       const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '233096657076-euilsqe9aq3pi8vj41pfjsqcl6nlkker.apps.googleusercontent.com';
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://mcp-chatbot-backend.onrender.com';
       
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${clientId}&` +

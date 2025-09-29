@@ -42,7 +42,7 @@ function App() {
 
   const fetchUserInfo = async () => {
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://mcp-chatbot-backend.onrender.com';
       const response = await fetch(`${backendUrl}/auth/status`);
       
       if (response.ok) {
@@ -58,7 +58,7 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://mcp-chatbot-backend.onrender.com';
       const response = await fetch(`${backendUrl}/auth/logout`, {
         method: 'POST',
         headers: {

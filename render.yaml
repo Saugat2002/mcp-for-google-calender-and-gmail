@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: mcp-chatbot-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: cd backend && uv sync
+    startCommand: cd backend && uv run main.py
+    healthCheckPath: /health
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_PROJECT_ID
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: https://mcp-chatbot-backend.onrender.com/auth/google/callback
+      - key: PORT
+        value: 8000

@@ -1,1 +1,0 @@
-web: cd backend && uv run python main.py
