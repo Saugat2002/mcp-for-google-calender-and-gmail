@@ -4,7 +4,6 @@
     },
     "deploy": {
         "startCommand": "cd backend && uv run python main.py",
-        "healthcheckPath": "/auth/status"
+        "healthcheckPath": "/health"
     }
 }
-

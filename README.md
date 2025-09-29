@@ -1,165 +1,134 @@
-# MCP Chatbot - FastAPI + React
+# MCP Chatbot
 
-A modern chatbot application built with FastAPI backend and React frontend, integrated with Google Calendar through MCP (Model Context Protocol).
+A chatbot that integrates with Google Calendar and Gmail using the Model Context Protocol (MCP). Built with FastAPI and React.
 
-## Features
+## What it does
 
-- 🤖 AI-powered chatbot using Google Gemini
-- 📅 Google Calendar integration via MCP
-- 🔄 Real-time WebSocket communication
-- 💬 Modern chat interface
-- 🎨 Beautiful, responsive UI
-- ⚡ Fast and efficient
+This chatbot can help you manage your Google Calendar and Gmail through natural conversation. You can ask it to:
+- Show your upcoming calendar events
+- Create new meetings
+- Search and read your emails
+- Send emails
+- Get time and date information
 
-## Project Structure
+## Tech stack
+
+- **Backend**: FastAPI with WebSocket support
+- **Frontend**: React with TypeScript
+- **AI**: Google Gemini via LangChain
+- **MCP**: Custom Gmail server + Google Calendar MCP
+- **Auth**: Google OAuth 2.0
+
+## Project structure
 
 ```
 mcpproject/
-├── backend/                 # FastAPI backend
-│   ├── main.py             # Main FastAPI application
-│   ├── run.py              # Run script
-│   └── requirements.txt    # Python dependencies
-├── frontend/               # React frontend
+├── backend/
+│   ├── main.py                    # FastAPI app
+│   ├── gmail_mcp_server.py        # Custom Gmail MCP server
+│   ├── requirements.txt           # Python dependencies
+│   ├── pyproject.toml            # UV project config
+│   └── gcp-oauth.keys.json       # Google OAuth credentials
+├── frontend/
 │   ├── src/
-│   │   ├── App.js          # Main React component
-│   │   ├── App.css         # Styling
-│   │   ├── index.js        # React entry point
-│   │   └── index.css       # Global styles
-│   ├── public/
-│   │   └── index.html      # HTML template
-│   └── package.json        # Node.js dependencies
-├── gcp-oauth.keys.json     # Google OAuth credentials
-├── .env                    # Environment variables
-└── README.md               # This file
+│   │   ├── App.tsx               # Main chat interface
+│   │   ├── components/
+│   │   │   └── GoogleSignIn.tsx  # OAuth sign-in
+│   │   ├── MarkdownRenderer.tsx  # Message formatting
+│   │   └── App.css               # Styles
+│   └── package.json              # Node dependencies
+└── README.md
 ```
 
-## Prerequisites
+## Getting started
 
-- Python 3.8+
-- Node.js 16+
-- Google Cloud Platform account
-- Google Calendar API enabled
+### Prerequisites
 
-## Setup Instructions
+- Python 3.13+
+- Node.js 18+
+- UV package manager
+- Google Cloud project with Calendar and Gmail APIs enabled
 
-### 1. Backend Setup
+### Backend setup
 
 ```bash
-# Navigate to backend directory
 cd backend
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+uv init
 
-# Install dependencies
-pip install -r requirements.txt
+uv venv
+
+source .venv/bin/activate
+
+# Install dependencies with UV
+uv sync
 
 # Set up environment variables
-cp ../.env .env
-# Edit .env with your credentials
+# Create .env file with:
+# GOOGLE_API_KEY=your_api_key
+# GOOGLE_CLIENT_ID=your_client_id
+# GOOGLE_CLIENT_SECRET=your_client_secret
+# GOOGLE_PROJECT_ID=your_project_id
+# GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
 
-# Run the backend
-python run.py
+# Run the server
+uv run main.py
 ```
 
-The backend will start on `http://localhost:8000`
-
-### 2. Frontend Setup
+### Frontend setup
 
 ```bash
-# Navigate to frontend directory
 cd frontend
 
 # Install dependencies
 npm install
 
-# Start the development server
-npm start
+# Start development server
+npm run dev
 ```
 
-The frontend will start on `http://localhost:3000`
-
-### 3. Google Calendar Setup
+### Google OAuth setup
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable Google Calendar API
-4. Create OAuth 2.0 credentials
-5. Download the JSON file and place it as `gcp-oauth.keys.json`
-6. Update the redirect URIs in Google Cloud Console:
-   - `http://localhost:8000/oauth2callback`
-   - `http://localhost:8000/auth/callback`
+2. Create a project and enable Calendar API and Gmail API
+3. Create OAuth 2.0 credentials
+4. Set authorized redirect URI to `http://localhost:8000/auth/google/callback`
+5. Download credentials as `gcp-oauth.keys.json` in the backend folder
 
-## Usage
+## How it works
 
-1. Start both backend and frontend servers
-2. Open `http://localhost:3000` in your browser
-3. The chatbot will automatically connect to the backend
-4. Start chatting! Try asking:
-   - "Show my upcoming events"
-   - "Create a meeting tomorrow at 2 PM"
-   - "What's my schedule for today?"
-   - "Find free time slots this week"
+1. **Authentication**: Users sign in with Google OAuth
+2. **MCP Integration**: The app connects to MCP servers for Calendar and Gmail
+3. **AI Processing**: Google Gemini processes user requests
+4. **Real-time Chat**: WebSocket handles the conversation flow
 
-## API Endpoints
+## Key features
 
-### WebSocket
-- `ws://localhost:8000/ws` - Real-time chat communication
+- **Real-time chat** via WebSocket
+- **Google Calendar integration** through MCP
+- **Gmail access** with custom MCP server
+- **Time and date tools** via MCP
+- **Modern UI** with React and TypeScript
+- **Responsive design** that works on mobile
 
-### REST API
-- `GET /` - Health check
-- `GET /health` - Detailed health status
-- `POST /chat` - Send message via REST API
+## API endpoints
 
-## Environment Variables
-
-```env
-GOOGLE_API_KEY=your_google_api_key
-GOOGLE_OAUTH_CREDENTIALS=/path/to/your/oauth/credentials.json
-```
-
-## Troubleshooting
-
-### OAuth Issues
-If you encounter OAuth redirect URI mismatch errors:
-1. Check your Google Cloud Console OAuth configuration
-2. Ensure redirect URIs match exactly
-3. Try using service account credentials instead
-
-### Connection Issues
-- Ensure both backend and frontend are running
-- Check that ports 8000 and 3000 are available
-- Verify WebSocket connection in browser developer tools
-
-### MCP Agent Issues
-- Check that your Google OAuth credentials are valid
-- Ensure Google Calendar API is enabled
-- Verify the MCP server can access your credentials file
+- `GET /auth/status` - Check authentication status
+- `POST /auth/logout` - Sign out
+- `GET /auth/google/callback` - OAuth callback
+- `GET /health` - Health check
+- `WebSocket /ws` - Chat communication
 
 ## Development
 
-### Backend Development
-```bash
-cd backend
-python run.py  # Starts with auto-reload
+The backend uses UV for dependency management and the frontend uses Vite for fast development. Both support hot reloading during development.
+
+## Environment variables
+
+```env
+GOOGLE_API_KEY=your_google_api_key
+GOOGLE_CLIENT_ID=your_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_oauth_client_secret
+GOOGLE_PROJECT_ID=your_gcp_project_id
+GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
 ```
-
-### Frontend Development
-```bash
-cd frontend
-npm start  # Starts with hot-reload
-```
-
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details
