@@ -94,7 +94,14 @@ function App() {
     if (!isAuthenticated) return;
 
     const connectWebSocket = () => {
-      const websocket = new WebSocket('ws://localhost:8000/ws');
+      // const websocket = new WebSocket('ws://localhost:8000/ws');
+
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const url = new URL(backendUrl);
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      url.pathname = '/ws';
+      url.search = '';
+      const websocket = new WebSocket(url.toString());
       
       websocket.onopen = () => {
         console.log('Connected to WebSocket');
