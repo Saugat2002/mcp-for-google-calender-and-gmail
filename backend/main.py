@@ -293,7 +293,7 @@ async def google_callback(code: str = None, state: str = None):
             "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
             "code": code,
             "grant_type": "authorization_code",
-            "redirect_uri": "http://localhost:8000/auth/google/callback"
+            "redirect_uri": os.getenv("GOOGLE_REDIRECT_URI")
         }
         
         response = http_requests.post(token_url, data=token_data)
