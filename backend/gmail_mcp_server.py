@@ -43,14 +43,17 @@ class GmailService(GoogleServiceBase):
         return {'raw': base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')}
 
 gmail_service = GmailService()
-initialize_google_service(gmail_service, "Gmail", gmail_service.scopes)
 
 @mcp.tool()
 def get_gmail_timezone_info():
+    if not gmail_service.service:
+        initialize_google_service(gmail_service, "Gmail", gmail_service.scopes)
     return get_timezone_info(gmail_service)
 
 @mcp.tool()
 def search_emails(query: str = "", max_results: int = 10):
+    if not gmail_service.service:
+        initialize_google_service(gmail_service, "Gmail", gmail_service.scopes)
     results = gmail_service.service.users().messages().list(userId='me', q=query, maxResults=max_results).execute()
     emails = []
     for message in results.get('messages', []):
@@ -73,6 +76,8 @@ def search_emails(query: str = "", max_results: int = 10):
 
 @mcp.tool()
 def get_email(message_id: str):
+    if not gmail_service.service:
+        initialize_google_service(gmail_service, "Gmail", gmail_service.scopes)
     msg = gmail_service.service.users().messages().get(userId='me', id=message_id).execute()
     headers = msg['payload'].get('headers', [])
     subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
@@ -93,6 +98,8 @@ def get_email(message_id: str):
 
 @mcp.tool()
 def send_email(to: str, subject: str, body: str):
+    if not gmail_service.service:
+        initialize_google_service(gmail_service, "Gmail", gmail_service.scopes)
     message = gmail_service._create_message(to, subject, body)
     sent_message = gmail_service.service.users().messages().send(userId='me', body=message).execute()
     return json.dumps({

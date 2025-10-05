@@ -44,10 +44,10 @@ class GoogleServiceBase:
         return datetime.now(self.get_user_timezone())
 
 def initialize_google_service(service_class, service_name: str, default_scopes: list):
-    credentials_path = os.getenv("GOOGLE_OAUTH_CREDENTIALS", "/Users/saugatadhikari/Saugat/WORK/IBRIZ/AssesmentTask/mcpproject/backend/gcp-oauth.keys.json")
+    credentials_path = os.getenv("GOOGLE_OAUTH_CREDENTIALS")
     token_string = os.getenv("GOOGLE_ACCESS_TOKEN", "")
     
-    if not token_string or not os.path.exists(credentials_path):
+    if not token_string or not credentials_path or not os.path.exists(credentials_path):
         return False
     
     try:

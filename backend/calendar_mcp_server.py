@@ -35,14 +35,19 @@ class CalendarService(GoogleServiceBase):
         self.user_timezone = pytz.timezone('Asia/Kathmandu')
 
 calendar_service = CalendarService()
-initialize_google_service(calendar_service, "Calendar", calendar_service.scopes)
 
 @mcp.tool()
 def get_calendar_timezone_info():
+    if not calendar_service.service:
+        initialize_google_service(calendar_service, "Calendar", calendar_service.scopes)
     return get_timezone_info(calendar_service)
 
 @mcp.tool()
 def list_events(max_results: int = 10, time_min: str = None, time_max: str = None):
+    print(f"list_events called: max_results={max_results}, time_min={time_min}, time_max={time_max}")
+    if not calendar_service.service:
+        print("Initializing calendar service...")
+        initialize_google_service(calendar_service, "Calendar", calendar_service.scopes)
     if not time_min:
         time_min = calendar_service.get_current_user_time().isoformat()
     if not time_max:
@@ -67,6 +72,17 @@ def list_events(max_results: int = 10, time_min: str = None, time_max: str = Non
     for event in events:
         start = event['start'].get('dateTime', event['start'].get('date'))
         end = event['end'].get('dateTime', event['end'].get('date'))
+        
+        # Extract attendees
+        attendees = []
+        if 'attendees' in event:
+            for attendee in event['attendees']:
+                attendees.append({
+                    'email': attendee.get('email', ''),
+                    'displayName': attendee.get('displayName', ''),
+                    'responseStatus': attendee.get('responseStatus', 'needsAction')
+                })
+        
         event_list.append({
             'id': event['id'],
             'summary': event.get('summary', 'No Title'),
@@ -74,12 +90,17 @@ def list_events(max_results: int = 10, time_min: str = None, time_max: str = Non
             'end': end,
             'description': event.get('description', ''),
             'location': event.get('location', ''),
-            'status': event.get('status', '')
+            'status': event.get('status', ''),
+            'attendees': attendees
         })
     return json.dumps(event_list, indent=2)
 
 @mcp.tool()
-def create_event(summary: str, start_time: str, end_time: str, description: str = "", location: str = ""):
+def create_event(summary: str, start_time: str, end_time: str, description: str = "", location: str = "", attendees: str = ""):
+    print(f"create_event called: {summary}, {start_time}, {end_time}, attendees: {attendees}")
+    if not calendar_service.service:
+        print("Initializing calendar service...")
+        initialize_google_service(calendar_service, "Calendar", calendar_service.scopes)
     start_time_parsed = parse_datetime_string(start_time, calendar_service.get_user_timezone())
     end_time_parsed = parse_datetime_string(end_time, calendar_service.get_user_timezone())
     
@@ -94,6 +115,16 @@ def create_event(summary: str, start_time: str, end_time: str, description: str 
         'end': {'dateTime': end_time_parsed, 'timeZone': timezone_str}
     }
     
+    # Add attendees if provided
+    if attendees:
+        attendee_list = []
+        for email in attendees.split(','):
+            email = email.strip()
+            if email:
+                attendee_list.append({'email': email})
+        if attendee_list:
+            event['attendees'] = attendee_list
+    
     created_event = calendar_service.service.events().insert(calendarId='primary', body=event).execute()
     return json.dumps({
         "success": True,
@@ -104,7 +135,19 @@ def create_event(summary: str, start_time: str, end_time: str, description: str 
 
 @mcp.tool()
 def get_event(event_id: str):
+    if not calendar_service.service:
+        initialize_google_service(calendar_service, "Calendar", calendar_service.scopes)
     event = calendar_service.service.events().get(calendarId='primary', eventId=event_id).execute()
+    # Extract attendees
+    attendees = []
+    if 'attendees' in event:
+        for attendee in event['attendees']:
+            attendees.append({
+                'email': attendee.get('email', ''),
+                'displayName': attendee.get('displayName', ''),
+                'responseStatus': attendee.get('responseStatus', 'needsAction')
+            })
+    
     return json.dumps({
         'id': event['id'],
         'summary': event.get('summary', 'No Title'),
@@ -113,11 +156,14 @@ def get_event(event_id: str):
         'description': event.get('description', ''),
         'location': event.get('location', ''),
         'status': event.get('status', ''),
-        'html_link': event.get('htmlLink', '')
+        'html_link': event.get('htmlLink', ''),
+        'attendees': attendees
     }, indent=2)
 
 @mcp.tool()
-def update_event(event_id: str, summary: str = None, start_time: str = None, end_time: str = None, description: str = None, location: str = None):
+def update_event(event_id: str, summary: str = None, start_time: str = None, end_time: str = None, description: str = None, location: str = None, attendees: str = None):
+    if not calendar_service.service:
+        initialize_google_service(calendar_service, "Calendar", calendar_service.scopes)
     event = calendar_service.service.events().get(calendarId='primary', eventId=event_id).execute()
     
     if summary:
@@ -137,6 +183,19 @@ def update_event(event_id: str, summary: str = None, start_time: str = None, end
     if location is not None:
         event['location'] = location
     
+    # Update attendees if provided
+    if attendees is not None:
+        if attendees:
+            attendee_list = []
+            for email in attendees.split(','):
+                email = email.strip()
+                if email:
+                    attendee_list.append({'email': email})
+            event['attendees'] = attendee_list
+        else:
+            # Remove attendees if empty string provided
+            event['attendees'] = []
+    
     updated_event = calendar_service.service.events().update(calendarId='primary', eventId=event_id, body=event).execute()
     return json.dumps({
         "success": True,
@@ -146,6 +205,8 @@ def update_event(event_id: str, summary: str = None, start_time: str = None, end
 
 @mcp.tool()
 def delete_event(event_id: str):
+    if not calendar_service.service:
+        initialize_google_service(calendar_service, "Calendar", calendar_service.scopes)
     calendar_service.service.events().delete(calendarId='primary', eventId=event_id).execute()
     return json.dumps({
         "success": True,

@@ -97,7 +97,15 @@ You can help users with:
 
 All operations use the user's timezone from their Google account settings.
 
-NOTE: When responding to users, provide clear, concise, and direct answers. Do NOT include your internal reasoning, thought processes, or step-by-step analysis in your responses. Directly provide the final answer or result by assuming anything you are unsure about. Be conversational, helpful and user-friendly. NEVER show internal reasoning like "Let me think..." or "I need to..." in your final response."""
+IMPORTANT: Always use the appropriate tools to complete user requests. For calendar operations, use the calendar tools. For email operations, use the Gmail tools. For time operations, use the time tools.
+
+When a user asks to add a meeting or create an event, you MUST use the create_event tool.
+When a user asks to delete a meeting, you MUST use the delete_event tool.
+When a user asks to list meetings, you MUST use the list_events tool.
+
+ATTENDEES: You can add attendees to calendar events by providing their email addresses separated by commas in the attendees parameter. For example: "john@example.com, jane@example.com"
+
+Always complete the requested action using the appropriate tools."""
 
 class ConnectionManager:
     def __init__(self):
@@ -193,12 +201,20 @@ async def websocket_endpoint(websocket: WebSocket):
                 websocket
             )
             
-            result = await agent.run(user_message)
-            
-            await manager.send_personal_message(
-                json.dumps({"type": "response", "message": str(result)}), 
-                websocket
-            )
+            try:
+                print(f"Running agent with message: {user_message}")
+                result = await agent.run(user_message)
+                print(f"Agent result: {str(result)}")
+                await manager.send_personal_message(
+                    json.dumps({"type": "response", "message": str(result)}), 
+                    websocket
+                )
+            except Exception as e:
+                print(f"Agent error: {str(e)}")
+                await manager.send_personal_message(
+                    json.dumps({"type": "error", "message": f"Agent error: {str(e)}"}), 
+                    websocket
+                )
         
         elif message_data.get("type") == "ping":
             await manager.send_personal_message(

@@ -65,12 +65,13 @@ uv sync
 
 # Set up environment variables
 # Create .env file with:
-# GOOGLE_API_KEY=your_api_key
-# GOOGLE_CLIENT_ID=your_client_id
-# GOOGLE_CLIENT_SECRET=your_client_secret
-# GOOGLE_PROJECT_ID=your_project_id
-# GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
-# PORT = 8000
+GOOGLE_API_KEY=your_api_key
+GOOGLE_CLIENT_ID=your_client_id
+GOOGLE_CLIENT_SECRET=your_client_secret
+GOOGLE_PROJECT_ID=your_project_id
+GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
+PORT = 8000
+
 
 # Run the server
 uv run main.py
@@ -84,6 +85,10 @@ cd frontend
 # Install dependencies
 npm install
 
+# Setup Environment Variables
+VITE_BACKEND_URL=http://localhost:8000
+VITE_GOOGLE_CLIENT_ID=your_client_id
+
 # Start development server
 npm run dev
 ```
@@ -93,11 +98,11 @@ To get the required google environment variables, the following setup in Google 
 ### Google OAuth setup
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project and enable Calendar API and Gmail API
-3. Create OAuth 2.0 credentials
-4. Set authorized redirect URI to `http://localhost:8000/auth/google/callback`
-5. Download credentials as `gcp-oauth.keys.json` in the backend folder
-6. The json should be in format:
+2. Create a project and select it.
+3. Goto API and Services < Enabled API and Services and enable Calendar API, Gemini API and Gmail API.
+4. Go to OAuth Consent Screen and set it up (Select the External Option).
+5. Then, click on create Oauth Client, use type as Web Application and add `http://localhost:8000/auth/google/callback` this in Authorized Redirect URLs and create the client.
+5. Download credentials json file. The json should be in format:
     ```
     {
     "installed": {
@@ -111,8 +116,9 @@ To get the required google environment variables, the following setup in Google 
         }
     }
     ```
-7. In the `.env` file, use the above `client_id`, `project_id` and `client_secret`.
-8. Also, get an Gemini API Key from the same account and put it in the `.env` file.
+7. Go to Credentials again and create an API Key with default settings.
+8. In the `.env` file, use the above `api_key`, `client_id`, `project_id` and `client_secret`.
+9. Also, in Oauth Consent Screen < Audience, add test users as the emails you want to test this app with.
 
 ## How it works
 
