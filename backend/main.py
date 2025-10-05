@@ -1,8 +1,11 @@
 import json
 import os
 import logging
+import uuid
+import time
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from mcp_use import MCPAgent, MCPClient
@@ -13,49 +16,46 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 load_dotenv()
 
-agent = None
-auth_status = False
-user_info = None
-AUTH_STATUS_FILE = "auth_status.json"
-USER_INFO_FILE = "user_info.json"
+# Session storage - in production, use Redis or database
+user_sessions = {}
+agents = {}  # Store agents per session
 
-def save_auth_status(status: bool):
-    try:
-        with open(AUTH_STATUS_FILE, 'w') as f:
-            json.dump({"authenticated": status}, f)
-    except Exception as e:
-        logger.error(f"Error saving auth status: {str(e)}")
+def create_session(user_data, access_token):
+    """Create a new user session"""
+    session_id = str(uuid.uuid4())
+    user_sessions[session_id] = {
+        "user_data": user_data,
+        "access_token": access_token,
+        "created_at": time.time(),
+        "authenticated": True
+    }
+    return session_id
 
-def load_auth_status():
-    global auth_status
-    try:
-        if os.path.exists(AUTH_STATUS_FILE):
-            with open(AUTH_STATUS_FILE, 'r') as f:
-                data = json.load(f)
-                auth_status = data.get("authenticated", False)
-    except Exception as e:
-        logger.error(f"Error loading auth status: {str(e)}")
+def get_session(session_id):
+    """Get session data by session ID"""
+    if session_id and session_id in user_sessions:
+        session = user_sessions[session_id]
+        # Check if session is not expired (24 hours)
+        if time.time() - session["created_at"] < 86400:
+            return session
+        else:
+            # Remove expired session
+            del user_sessions[session_id]
+    return None
 
-def save_user_info(user_data):
-    try:
-        with open(USER_INFO_FILE, 'w') as f:
-            json.dump(user_data, f)
-    except Exception as e:
-        logger.error(f"Error saving user info: {str(e)}")
+def delete_session(session_id):
+    """Delete a user session"""
+    if session_id and session_id in user_sessions:
+        del user_sessions[session_id]
+    if session_id and session_id in agents:
+        del agents[session_id]
 
-def load_user_info():
-    global user_info
+async def authenticate_mcp_servers_for_session(session_id: str, user_email: str, token: str):
+    """Authenticate MCP servers for a specific session"""
     try:
-        if os.path.exists(USER_INFO_FILE):
-            with open(USER_INFO_FILE, 'r') as f:
-                user_info = json.load(f)
-    except Exception as e:
-        logger.error(f"Error loading user info: {str(e)}")
-
-async def authenticate_mcp_servers(user_email: str, token: str):
-    try:
-        calendar_mcp_dir = os.path.expanduser("~/.config/google-calendar-mcp")
-        os.makedirs(calendar_mcp_dir, exist_ok=True)
+        # Create session-specific directory
+        session_mcp_dir = os.path.expanduser(f"~/.config/google-calendar-mcp-{session_id}")
+        os.makedirs(session_mcp_dir, exist_ok=True)
         
         credentials = {
             "installed": {
@@ -69,7 +69,7 @@ async def authenticate_mcp_servers(user_email: str, token: str):
             }
         }
         
-        calendar_credentials_path = os.path.join(calendar_mcp_dir, "gcp-oauth.keys.json")
+        calendar_credentials_path = os.path.join(session_mcp_dir, "gcp-oauth.keys.json")
         with open(calendar_credentials_path, 'w') as f:
             json.dump(credentials, f)
         
@@ -83,7 +83,7 @@ async def authenticate_mcp_servers(user_email: str, token: str):
                 "https://www.googleapis.com/auth/userinfo.email",
                 "https://www.googleapis.com/auth/userinfo.profile",
                 "https://www.googleapis.com/auth/calendar",
-                "https://www.googleapis.com/auth/calender.events",
+                "https://www.googleapis.com/auth/calendar.events",
                 "https://www.googleapis.com/auth/gmail.readonly",
                 "https://www.googleapis.com/auth/gmail.send",
                 "https://www.googleapis.com/auth/gmail.modify",
@@ -91,23 +91,24 @@ async def authenticate_mcp_servers(user_email: str, token: str):
             "expiry": None
         }
         
-        calendar_token_path = os.path.join(calendar_mcp_dir, "tokens.json")
+        calendar_token_path = os.path.join(session_mcp_dir, "tokens.json")
         with open(calendar_token_path, 'w') as f:
             json.dump(token_data, f)
         
-        os.environ["GOOGLE_OAUTH_CREDENTIALS"] = calendar_credentials_path
-        os.environ["GOOGLE_ACCESS_TOKEN"] = token
+        logger.info(f"MCP servers authenticated for session {session_id}, user: {user_email}")
         
-        logger.info(f"MCP servers authenticated for user: {user_email}")
-        
-        reinit_success = await reinitialize_agent()
-        if reinit_success:
-            logger.info(f"MCP agent successfully reinitialized for user: {user_email}")
+        # Initialize agent for this session
+        agent = await initialize_agent_for_session(session_id, calendar_credentials_path, token)
+        if agent:
+            agents[session_id] = agent
+            logger.info(f"MCP agent successfully initialized for session {session_id}")
+            return True
         else:
-            logger.warning(f"MCP agent reinitialization failed for user: {user_email}")
+            logger.warning(f"MCP agent initialization failed for session {session_id}")
+            return False
         
     except Exception as e:
-        logger.error(f"Error authenticating MCP servers: {str(e)}")
+        logger.error(f"Error authenticating MCP servers for session {session_id}: {str(e)}")
         raise
 
 SYSTEM_PROMPT = """You are a helpful AI assistant with access to Google Calendar, Gmail, and time server. 
@@ -135,8 +136,8 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-async def initialize_agent():
-    global agent
+async def initialize_agent_for_session(session_id: str, credentials_path: str, access_token: str):
+    """Initialize MCP agent for a specific session"""
     try:
         config = {
             "mcpServers": {
@@ -148,16 +149,16 @@ async def initialize_agent():
                     "command": "npx",
                     "args": ["@cocal/google-calendar-mcp"],
                     "env": {
-                        "GOOGLE_OAUTH_CREDENTIALS": os.getenv("GOOGLE_OAUTH_CREDENTIALS", "/Users/saugatadhikari/Saugat/WORK/IBRIZ/AssesmentTask/mcpproject/backend/gcp-oauth.keys.json"),
-                        "GOOGLE_ACCESS_TOKEN": os.getenv("GOOGLE_ACCESS_TOKEN", "")
+                        "GOOGLE_OAUTH_CREDENTIALS": credentials_path,
+                        "GOOGLE_ACCESS_TOKEN": access_token
                     }
                 },
                 "gmail": {
                     "command": "uv",
                     "args": ["run", "python", "gmail_mcp_server.py"],
                     "env": {
-                        "GOOGLE_OAUTH_CREDENTIALS": os.getenv("GOOGLE_OAUTH_CREDENTIALS", "/Users/saugatadhikari/Saugat/WORK/IBRIZ/AssesmentTask/mcpproject/backend/gcp-oauth.keys.json"),
-                        "GOOGLE_ACCESS_TOKEN": os.getenv("GOOGLE_ACCESS_TOKEN", "")
+                        "GOOGLE_OAUTH_CREDENTIALS": credentials_path,
+                        "GOOGLE_ACCESS_TOKEN": access_token
                     }
                 }
             }
@@ -167,37 +168,16 @@ async def initialize_agent():
         llm = init_chat_model("gemini-2.5-flash", model_provider="google_genai")
         agent = MCPAgent(llm=llm, client=client, max_steps=90, system_prompt=SYSTEM_PROMPT)
         
-        logger.info("MCP Agent initialized successfully")
-        return True
+        logger.info(f"MCP Agent initialized successfully for session {session_id}")
+        return agent
         
     except Exception as e:
-        logger.error(f"Failed to initialize MCP Agent: {str(e)}")
-        return False
-
-async def reinitialize_agent():
-    global agent
-    try:
-        if agent:
-            try:
-                if hasattr(agent, 'client') and hasattr(agent.client, 'close'):
-                    await agent.client.close()
-            except Exception as e:
-                logger.warning(f"Error closing existing agent: {str(e)}")
-        
-        success = await initialize_agent()
-        if success:
-            logger.info("MCP Agent reinitialized successfully with new credentials")
-        else:
-            logger.error("Failed to reinitialize MCP Agent")
-        return success
-        
-    except Exception as e:
-        logger.error(f"Error reinitializing MCP Agent: {str(e)}")
-        return False
+        logger.error(f"Failed to initialize MCP Agent for session {session_id}: {str(e)}")
+        return None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await initialize_agent()
+    # No global agent initialization needed - agents are created per session
     yield
 
 app = FastAPI(
@@ -217,6 +197,7 @@ app.add_middleware(
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
+    session_id = None
     
     try:
         while True:
@@ -225,12 +206,25 @@ async def websocket_endpoint(websocket: WebSocket):
             
             if message_data.get("type") == "message":
                 user_message = message_data.get("message", "")
+                session_id = message_data.get("sessionId")
                 
+                if not session_id:
+                    await manager.send_personal_message(
+                        json.dumps({
+                            "type": "error",
+                            "message": "Session ID required. Please authenticate first."
+                        }), 
+                        websocket
+                    )
+                    continue
+                
+                # Get agent for this session
+                agent = agents.get(session_id)
                 if not agent:
                     await manager.send_personal_message(
                         json.dumps({
                             "type": "error",
-                            "message": "Agent not initialized. Please check server logs."
+                            "message": "Agent not initialized for your session. Please re-authenticate."
                         }), 
                         websocket
                     )
@@ -277,8 +271,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/auth/google/callback")
 async def google_callback(code: str = None, state: str = None):
-    global auth_status
-    
     try:
         if not code:
             raise HTTPException(status_code=400, detail="Authorization code not provided")
@@ -318,58 +310,57 @@ async def google_callback(code: str = None, state: str = None):
                     logger.info("No email in user info, trying token info")
                     user_email = f"user_{user_data.get('id', 'unknown')}@gmail.com"
                 
-                os.environ["GOOGLE_ACCESS_TOKEN"] = access_token
-                await authenticate_mcp_servers(user_email, access_token)
+                # Create session for this user
+                session_id = create_session(user_data, access_token)
                 
-                auth_status = True
-                user_info = user_data
+                # Authenticate MCP servers for this session
+                await authenticate_mcp_servers_for_session(session_id, user_email, access_token)
                 
-                save_auth_status(True)
-                save_user_info(user_data)
+                logger.info(f"Authentication successful for user: {user_email}, session: {session_id}")
                 
-                logger.info(f"Authentication successful for user: {user_email}")
-                logger.info(f"Stored user_info: {user_info}")
-                
-                return """
+                return HTMLResponse(f"""
                 <html>
                     <head><title>Authentication Successful</title></head>
                     <body>
                         <h1>✅ Authentication Successful!</h1>
                         <p>You can now close this window and return to the application.</p>
                         <script>
-                            if (window.opener) {
-                                window.opener.postMessage('auth_success', '*');
-                            }
+                            if (window.opener) {{
+                                window.opener.postMessage({{type: 'auth_success', sessionId: '{session_id}'}}, '*');
+                            }}
                             setTimeout(() => window.close(), 3000);
                         </script>
                     </body>
                 </html>
-                """
+                """)
             else:
                 logger.warning(f"Failed to get user info: {user_response.status_code} - {user_response.text}")
                 user_email = "authenticated_user@gmail.com"
+                user_data = {"email": user_email, "id": "unknown", "name": "User"}
                 
-                await authenticate_mcp_servers(user_email, access_token)
+                # Create session for this user
+                session_id = create_session(user_data, access_token)
                 
-                auth_status = True
+                # Authenticate MCP servers for this session
+                await authenticate_mcp_servers_for_session(session_id, user_email, access_token)
                 
-                logger.info(f"Authentication successful for user: {user_email}")
+                logger.info(f"Authentication successful for user: {user_email}, session: {session_id}")
                 
-                return """
+                return HTMLResponse(f"""
                 <html>
                     <head><title>Authentication Successful</title></head>
                     <body>
                         <h1>✅ Authentication Successful!</h1>
                         <p>You can now close this window and return to the application.</p>
                         <script>
-                            if (window.opener) {
-                                window.opener.postMessage('auth_success', '*');
-                            }
+                            if (window.opener) {{
+                                window.opener.postMessage({{type: 'auth_success', sessionId: '{session_id}'}}, '*');
+                            }}
                             setTimeout(() => window.close(), 3000);
                         </script>
                     </body>
                 </html>
-                """
+                """)
         else:
             logger.error(f"Token exchange failed: {response.status_code} - {response.text}")
             raise HTTPException(status_code=400, detail="Token exchange failed")
@@ -379,39 +370,29 @@ async def google_callback(code: str = None, state: str = None):
         raise HTTPException(status_code=500, detail="Authentication failed")
 
 @app.get("/auth/status")
-async def get_auth_status():
-    global auth_status, user_info
+async def get_auth_status(session_id: str = None):
     try:
-        load_auth_status()
-        load_user_info()
+        if not session_id:
+            return {"authenticated": False, "user": None}
         
-        logger.info(f"Auth status check - authenticated: {auth_status}, user_info: {user_info}")
-        logger.info(f"USER_INFO_FILE exists: {os.path.exists(USER_INFO_FILE)}")
-        if os.path.exists(USER_INFO_FILE):
-            with open(USER_INFO_FILE, 'r') as f:
-                file_content = f.read()
-                logger.info(f"USER_INFO_FILE content: {file_content}")
-        
-        return {
-            "authenticated": auth_status,
-            "user": user_info if auth_status else None
-        }
+        session = get_session(session_id)
+        if session:
+            return {
+                "authenticated": session["authenticated"],
+                "user": session["user_data"]
+            }
+        else:
+            return {"authenticated": False, "user": None}
     except Exception as e:
         logger.error(f"Error checking auth status: {str(e)}")
         return {"authenticated": False, "user": None}
 
 @app.post("/auth/logout")
-async def logout():
-    global auth_status, user_info
+async def logout(session_id: str = None):
     try:
-        auth_status = False
-        user_info = None
-        
-        save_auth_status(False)
-        if os.path.exists(USER_INFO_FILE):
-            os.remove(USER_INFO_FILE)
-        
-        logger.info("User logged out successfully")
+        if session_id:
+            delete_session(session_id)
+            logger.info(f"User session {session_id} logged out successfully")
         return {"success": True, "message": "Logged out successfully"}
     except Exception as e:
         logger.error(f"Error during logout: {str(e)}")

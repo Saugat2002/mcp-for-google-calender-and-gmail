@@ -34,6 +34,7 @@ function App() {
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -43,7 +44,7 @@ function App() {
   const fetchUserInfo = async () => {
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://mcp-chatbot-backend.onrender.com';
-      const response = await fetch(`${backendUrl}/auth/status`);
+      const response = await fetch(`${backendUrl}/auth/status?session_id=${sessionId}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -59,7 +60,7 @@ function App() {
   const handleLogout = async () => {
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://mcp-chatbot-backend.onrender.com';
-      const response = await fetch(`${backendUrl}/auth/logout`, {
+      const response = await fetch(`${backendUrl}/auth/logout?session_id=${sessionId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -69,6 +70,7 @@ function App() {
       if (response.ok) {
         setIsAuthenticated(false);
         setUserInfo(null);
+        setSessionId(null);
         setMessages([]);
         if (ws) {
           ws.close();
@@ -85,10 +87,10 @@ function App() {
   }, [messages]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && sessionId) {
       fetchUserInfo();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, sessionId]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -175,7 +177,8 @@ function App() {
 
     ws.send(JSON.stringify({
       type: 'message',
-      message: inputMessage.trim()
+      message: inputMessage.trim(),
+      sessionId: sessionId
     }));
   };
 
@@ -190,7 +193,13 @@ function App() {
     return (
       <div className="app">
         <div className="auth-container">
-          <GoogleSignIn onAuthSuccess={setIsAuthenticated} />
+          <GoogleSignIn onAuthSuccess={(authenticated, sessionId) => {
+            console.log('Auth success callback:', { authenticated, sessionId });
+            setIsAuthenticated(authenticated);
+            if (sessionId) {
+              setSessionId(sessionId);
+            }
+          }} />
         </div>
       </div>
     );

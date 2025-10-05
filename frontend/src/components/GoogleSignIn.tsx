@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { LogIn, Loader2, Calendar, Mail, Clock, Shield, CheckCircle, Zap } from 'lucide-react';
 
 interface GoogleSignInProps {
-  onAuthSuccess: (isAuthenticated: boolean) => void;
+  onAuthSuccess: (isAuthenticated: boolean, sessionId?: string) => void;
 }
 
 const GoogleSignIn: React.FC<GoogleSignInProps> = ({ onAuthSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -32,9 +33,12 @@ const GoogleSignIn: React.FC<GoogleSignInProps> = ({ onAuthSuccess }) => {
       );
 
       const handleMessage = (event: MessageEvent) => {
-        if (event.data === 'auth_success') {
+        console.log('Received message:', event.data);
+        if (event.data?.type === 'auth_success' && event.data?.sessionId) {
+          console.log('Auth success with session ID:', event.data.sessionId);
+          setSessionId(event.data.sessionId);
           setIsAuthenticated(true);
-          onAuthSuccess(true);
+          onAuthSuccess(true, event.data.sessionId);
           setIsLoading(false);
           window.removeEventListener('message', handleMessage);
         }
@@ -50,12 +54,12 @@ const GoogleSignIn: React.FC<GoogleSignInProps> = ({ onAuthSuccess }) => {
             window.removeEventListener('message', handleMessage);
             
             try {
-              const statusResponse = await fetch(`${backendUrl}/auth/status`);
+              const statusResponse = await fetch(`${backendUrl}/auth/status?session_id=${sessionId}`);
               if (statusResponse.ok) {
                 const statusData = await statusResponse.json();
                 if (statusData.authenticated) {
                   setIsAuthenticated(true);
-                  onAuthSuccess(true);
+                  onAuthSuccess(true, sessionId || undefined);
                   setIsLoading(false);
                 }
               }
@@ -65,7 +69,7 @@ const GoogleSignIn: React.FC<GoogleSignInProps> = ({ onAuthSuccess }) => {
             return;
           }
 
-          const statusResponse = await fetch(`${backendUrl}/auth/status`);
+          const statusResponse = await fetch(`${backendUrl}/auth/status?session_id=${sessionId}`);
           if (statusResponse.ok) {
             const statusData = await statusResponse.json();
             
@@ -73,7 +77,7 @@ const GoogleSignIn: React.FC<GoogleSignInProps> = ({ onAuthSuccess }) => {
               clearInterval(checkAuth);
               authWindow?.close();
               setIsAuthenticated(true);
-              onAuthSuccess(true);
+              onAuthSuccess(true, sessionId || undefined);
               setIsLoading(false);
               window.removeEventListener('message', handleMessage);
             }
