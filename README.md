@@ -19,27 +19,6 @@ This chatbot can help you manage your Google Calendar and Gmail through natural 
 - **MCP**: Custom Gmail server + Google Calendar MCP
 - **Auth**: Google OAuth 2.0
 
-## Project structure
-
-```
-mcpproject/
-├── backend/
-│   ├── main.py                    # FastAPI app
-│   ├── gmail_mcp_server.py        # Custom Gmail MCP server
-│   ├── requirements.txt           # Python dependencies
-│   ├── pyproject.toml            # UV project config
-│   └── gcp-oauth.keys.json       # Google OAuth credentials
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx               # Main chat interface
-│   │   ├── components/
-│   │   │   └── GoogleSignIn.tsx  # OAuth sign-in
-│   │   ├── MarkdownRenderer.tsx  # Message formatting
-│   │   └── App.css               # Styles
-│   └── package.json              # Node dependencies
-└── README.md
-```
-
 ## Getting started
 
 ### Prerequisites
